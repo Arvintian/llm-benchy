@@ -1,5 +1,4 @@
-// Package config provides command line parsing and endpoint model
-// auto-detection for llm-benchy.
+// Package config provides command line parsing for llm-benchy.
 package config
 
 import (
@@ -8,15 +7,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"flag"
 )
-
-const defaultBookURL = "https://www.gutenberg.org/files/1661/1661-0.txt"
 
 // ErrVersionShown is returned when --version was requested (clean exit).
 var ErrVersionShown = errors.New("version shown")
@@ -48,8 +44,6 @@ type BenchmarkConfig struct {
 	ExitOnFirstFail            bool
 	NoResultsOnFail            bool
 }
-
-var hfModelPattern = regexp.MustCompile(`^[^/]+/[^/]+$`)
 
 // multiIntFlag is a flag value that accepts one or more comma/space
 // separated integers per occurrence and appends them to a list
@@ -92,7 +86,7 @@ func FromFlags(args []string, version string) (*BenchmarkConfig, error) {
 
 	baseURL := fs.String("base-url", "", "OpenAI compatible endpoint URL (required)")
 	apiKey := fs.String("api-key", "EMPTY", "API Key for the endpoint")
-	model := fs.String("model", "", "Model name to use for benchmarking (auto-detected from endpoint if not specified)")
+	model := fs.String("model", "", "Model name to use for benchmarking (required)")
 	servedModelName := fs.String("served-model-name", "", "Model name used in API calls (defaults to --model if not specified)")
 	tokenizer := fs.String("tokenizer", "", "Tokenizer to use (defaults to gpt2 BPE approximation)")
 
@@ -105,7 +99,7 @@ func FromFlags(args []string, version string) (*BenchmarkConfig, error) {
 	numRuns := fs.Int("runs", 3, "Number of runs per test - default: 3")
 	noCache := fs.Bool("no-cache", false, "Ensure unique requests to avoid prefix caching and send cache_prompt=false to the server")
 	postRunCmd := fs.String("post-run-cmd", "", "Command to execute after each test run")
-	bookURL := fs.String("book-url", defaultBookURL, "URL of a book to use for text generation, defaults to Sherlock Holmes")
+	bookURL := fs.String("book-url", "", "URL of a book to download and use for text generation; empty (default) uses the embedded Sherlock Holmes")
 	latencyMode := fs.String("latency-mode", "api", "Method to measure latency: 'api' (list models) - default, 'generation' (single token generation), or 'none' (skip latency measurement)")
 	noWarmup := fs.Bool("no-warmup", false, "Skip warmup phase")
 	skipCoherence := fs.Bool("skip-coherence", false, "Skip coherence test after warmup")
@@ -215,21 +209,11 @@ func FromFlags(args []string, version string) (*BenchmarkConfig, error) {
 		NoResultsOnFail:            *noResultsOnFail,
 	}
 
-	// Auto-detect model if not specified
+	// Model name must be provided by the user
 	if cfg.Model == "" {
-		fmt.Println("No model specified, attempting to auto-detect from endpoint...")
-		hfModel, servedModel, err := DetectHFModelFromEndpoint(cfg.BaseURL, cfg.APIKey)
-		if err != nil {
-			return nil, err
-		}
-		cfg.Model = hfModel
-		if cfg.ServedModelName != "" {
-			// explicit --served-model-name wins
-		} else {
-			cfg.ServedModelName = servedModel
-		}
-		fmt.Printf("Auto-detected HF model: %s (served as: %s)\n", cfg.Model, cfg.ServedModelName)
-	} else if cfg.ServedModelName == "" {
+		return nil, requiredModelError(cfg.BaseURL, cfg.APIKey)
+	}
+	if cfg.ServedModelName == "" {
 		cfg.ServedModelName = cfg.Model
 	}
 
@@ -250,118 +234,70 @@ type modelsArrayResponse struct {
 	Models []modelInfo `json:"models"`
 }
 
-// DetectHFModelFromEndpoint fetches models from {baseURL}/models and
-// identifies the HF model name.
-//
-// Returns a tuple of (hf_model_name, served_model_name).
-func DetectHFModelFromEndpoint(baseURL, apiKey string) (string, string, error) {
+// requiredModelError builds the error returned when --model is missing.
+// It queries {baseURL}/models (best effort) so the user can pick a model
+// name from the list instead of guessing.
+func requiredModelError(baseURL, apiKey string) error {
+	var b strings.Builder
+	b.WriteString("required flag --model must be specified with the model name to benchmark\n")
+	if names, err := listEndpointModels(baseURL, apiKey); err == nil && len(names) > 0 {
+		b.WriteString("\nModels available at " + baseURL + ":\n")
+		for _, n := range names {
+			b.WriteString("  - " + n + "\n")
+		}
+	} else if err != nil {
+		b.WriteString("\n(hint: could not list models from " + baseURL + "/models: " + err.Error() + ")")
+	}
+	return errors.New(b.String())
+}
+
+// listEndpointModels fetches model names from the endpoint's /models
+// endpoint. Supports both the OpenAI shape ({"data": [{"id": ...}]}) and
+// the llama.cpp shape ({"models": [{"model": ...}]}).
+func listEndpointModels(baseURL, apiKey string) ([]string, error) {
 	client := &http.Client{Timeout: 5 * time.Second}
 	req, err := http.NewRequest(http.MethodGet, baseURL+"/models", nil)
 	if err != nil {
-		return "", "", err
+		return nil, err
 	}
 	if apiKey != "" && apiKey != "EMPTY" {
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
 	response, err := client.Do(req)
 	if err != nil {
-		return "", "", fmt.Errorf(
-			"Unable to connect to %s/models endpoint: %s\nPlease specify --model explicitly.",
-			baseURL, err)
+		return nil, err
 	}
 	defer response.Body.Close()
 
 	body, err := io.ReadAll(response.Body)
-	if err != nil || response.StatusCode < 200 || response.StatusCode >= 300 {
-		return "", "", fmt.Errorf(
-			"Unable to connect to %s/models endpoint: %s\nPlease specify --model explicitly.",
-			baseURL, err)
+	if err != nil {
+		return nil, err
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return nil, fmt.Errorf("unexpected status %d", response.StatusCode)
 	}
 
 	var dataResponse dataArrayResponse
 	var modelsResponse modelsArrayResponse
 	if err := json.Unmarshal(body, &dataResponse); err != nil {
-		return "", "", fmt.Errorf(
-			"Unable to parse response from %s/models endpoint: %s\nPlease specify --model explicitly.",
-			baseURL, err)
+		return nil, err
 	}
 	_ = json.Unmarshal(body, &modelsResponse)
 
-	var hfFormatted [][2]string // (hf_name, served_name)
-	var nonHFFormatted []string
-
-	// Parse data array first
+	var names []string
 	if dataResponse.Data != nil {
 		for _, m := range dataResponse.Data {
-			if m.Root != "" && hfModelPattern.MatchString(m.Root) {
-				hfFormatted = append(hfFormatted, [2]string{m.Root, m.ID})
-			} else if hfModelPattern.MatchString(m.ID) {
-				hfFormatted = append(hfFormatted, [2]string{m.ID, m.ID})
-			} else {
-				nonHFFormatted = append(nonHFFormatted, m.ID)
-			}
+			names = append(names, m.ID)
 		}
 	}
-	// Parse models array as a fallback; only if "data" was not present.
-	if dataResponse.Data == nil && modelsResponse.Models != nil {
+	if len(names) == 0 && modelsResponse.Models != nil {
 		for _, m := range modelsResponse.Models {
 			name := m.Model
 			if name == "" {
 				name = m.ID
 			}
-			if hfModelPattern.MatchString(name) {
-				hfFormatted = append(hfFormatted, [2]string{name, name})
-			} else {
-				nonHFFormatted = append(nonHFFormatted, name)
-			}
+			names = append(names, name)
 		}
 	}
-
-	// Guard: multiple models available - cannot determine which one to use
-	if len(hfFormatted)+len(nonHFFormatted) > 1 {
-		var b strings.Builder
-		b.WriteString("Multiple models available at the endpoint. Please specify --model explicitly.\n\n")
-		if len(hfFormatted) > 0 {
-			b.WriteString("Models with HF format:\n")
-			for _, m := range hfFormatted {
-				b.WriteString(fmt.Sprintf("  - %s\n", m[0]))
-			}
-		}
-		if len(nonHFFormatted) > 0 {
-			b.WriteString("Models without HF format:\n")
-			for _, m := range nonHFFormatted {
-				b.WriteString(fmt.Sprintf("  - %s\n", m))
-			}
-		}
-		b.WriteString("\nPlease specify --model explicitly with the model name you want to test.")
-		return "", "", errors.New(b.String())
-	}
-
-	// No models found
-	if len(hfFormatted) == 0 && len(nonHFFormatted) == 0 {
-		return "", "", errors.New("No models found at the endpoint.\nPlease specify --model explicitly.")
-	}
-
-	// Single non-HF model found
-	if len(hfFormatted) == 0 {
-		return "", "", fmt.Errorf(
-			"Model '%s' is not in HF format (namespace/model).\nPlease specify --model explicitly with a valid HF model name.",
-			nonHFFormatted[0])
-	}
-
-	// Single HF-formatted model found - validate against HF Hub
-	hfName, servedName := hfFormatted[0][0], hfFormatted[0][1]
-	hfClient := &http.Client{Timeout: 3 * time.Second}
-	hfResp, err := hfClient.Get("https://huggingface.co/api/models/" + hfName)
-	if err == nil {
-		status := hfResp.StatusCode
-		hfResp.Body.Close()
-		if status == 200 || status == 401 {
-			return hfName, servedName, nil
-		}
-	}
-
-	return "", "", fmt.Errorf(
-		"Model '%s' is not a valid HuggingFace model.\nPlease specify --model explicitly with a valid HF model name.",
-		hfName)
+	return names, nil
 }

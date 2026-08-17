@@ -1,9 +1,12 @@
-// Package corpus downloads a text book and tokenizes it for use as
-// benchmark prompt material.
+// Package corpus loads a text book and tokenizes it for use as benchmark
+// prompt material. The default corpus is embedded in the binary (The
+// Adventures of Sherlock Holmes, Project Gutenberg #1661); a custom
+// --book-url is downloaded dynamically and cached.
 package corpus
 
 import (
 	"crypto/md5"
+	_ "embed" // required for //go:embed directives
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -14,6 +17,9 @@ import (
 
 	"github.com/hupe1980/go-tiktoken"
 )
+
+//go:embed embedded_book.txt
+var embeddedBookText string
 
 // Tokenizer tokenizes and detokenizes text.
 type Tokenizer interface {
@@ -103,11 +109,25 @@ func (w *whitespaceTokenizer) Decode(tokens []int32) string {
 }
 
 func (c *TokenizedCorpus) loadData() []int32 {
+	text, source := c.loadText()
+	c.BookURL = source
+	return c.Tokenizer.Encode(text)
+}
+
+// loadText returns the book text and the source it came from. With an
+// empty bookURL the embedded book is used (no network access required);
+// otherwise the given URL is downloaded and cached in
+// ~/.cache/llm-benchy/.
+func (c *TokenizedCorpus) loadText() (string, string) {
+	if c.BookURL == "" {
+		return embeddedBookText, "embedded"
+	}
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = "."
 	}
-	cacheDir := filepath.Join(home, ".cache", "llama-benchy")
+	cacheDir := filepath.Join(home, ".cache", "llm-benchy")
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		fmt.Printf("Error creating cache directory: %v\n", err)
 		os.Exit(1)
@@ -125,7 +145,9 @@ func (c *TokenizedCorpus) loadData() []int32 {
 			os.Exit(1)
 		}
 		text = string(data)
-	} else {
+		return text, cacheFile
+	}
+	{
 		fmt.Printf("Downloading book from %s...\n", c.BookURL)
 		resp, err := http.Get(c.BookURL)
 		if err != nil {
@@ -153,8 +175,7 @@ func (c *TokenizedCorpus) loadData() []int32 {
 			fmt.Printf("Saved text to cache: %s\n", cacheFile)
 		}
 	}
-
-	return c.Tokenizer.Encode(text)
+	return text, c.BookURL
 }
 
 // Len returns the number of tokens in the corpus.

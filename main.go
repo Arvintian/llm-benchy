@@ -30,7 +30,7 @@ func main() {
 
 	// 2. Print header
 	currentTime := time.Now().Format("2006-01-02 15:04:05")
-	fmt.Printf("llama-benchy (%s)\n", Version)
+	fmt.Printf("llm-benchy (%s)\n", Version)
 	fmt.Printf("Date: %s\n", currentTime)
 	fmt.Printf("Benchmarking model: %s at %s\n", cfg.Model, cfg.BaseURL)
 	fmt.Printf("Concurrency levels: %v\n", cfg.ConcurrencyLevels)
@@ -52,6 +52,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("\nllama-benchy (%s)\n", Version)
+	fmt.Printf("\nllm-benchy (%s)\n", Version)
 	fmt.Printf("date: %s | latency mode: %s\n", currentTime, cfg.LatencyMode)
 }
