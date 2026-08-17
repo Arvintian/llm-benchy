@@ -1,4 +1,4 @@
-# llm-benchy (Go)
+# llm-benchy
 
 `llm-benchy` is a Go port of [llama-benchy](https://github.com/eugr/llama-benchy), a `llama-bench`
 style benchmarking tool for all OpenAI-compatible LLM backends. It benchmarks
@@ -171,12 +171,16 @@ On `Ctrl-C` (or with `--exit-on-first-fail`) the run is interrupted but
 collected results are still saved as a partial report, unless
 `--no-results-on-fail` was given.
 
+For the detailed per-phase behavior and exact metric formulas, see
+[docs/BENCHMARKING.md](docs/BENCHMARKING.md).
+
 ## Project layout
 
 ```
 main.go                  CLI entry point
 version.go               version (overridable via -ldflags)
 Makefile                 build / test / vet / cross-compile targets
+docs/BENCHMARKING.md     execution flow and metric algorithms (detailed)
 internal/config          flag parsing (+ endpoint /models listing)
 internal/corpus          corpus loading (embed + download), tokenization
 internal/corpus/embedded_book.txt  default corpus (Sherlock Holmes), embedded via //go:embed
