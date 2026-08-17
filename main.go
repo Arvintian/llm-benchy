@@ -10,11 +10,11 @@ import (
 	"os/signal"
 	"time"
 
-	"llm-benchy/internal/client"
-	"llm-benchy/internal/config"
-	"llm-benchy/internal/corpus"
-	"llm-benchy/internal/prompts"
-	"llm-benchy/internal/runner"
+	"github.com/Arvintian/llm-benchy/internal/client"
+	"github.com/Arvintian/llm-benchy/internal/config"
+	"github.com/Arvintian/llm-benchy/internal/corpus"
+	"github.com/Arvintian/llm-benchy/internal/prompts"
+	"github.com/Arvintian/llm-benchy/internal/runner"
 )
 
 func main() {

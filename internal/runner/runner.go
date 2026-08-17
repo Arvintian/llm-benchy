@@ -11,10 +11,10 @@ import (
 	"sync"
 	"time"
 
-	"llm-benchy/internal/client"
-	"llm-benchy/internal/config"
-	"llm-benchy/internal/prompts"
-	"llm-benchy/internal/results"
+	"github.com/Arvintian/llm-benchy/internal/client"
+	"github.com/Arvintian/llm-benchy/internal/config"
+	"github.com/Arvintian/llm-benchy/internal/prompts"
+	"github.com/Arvintian/llm-benchy/internal/results"
 )
 
 // ErrBenchmarkFailure signals that a benchmark test failed and execution

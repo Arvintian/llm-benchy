@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"llm-benchy/internal/corpus"
+	"github.com/Arvintian/llm-benchy/internal/corpus"
 )
 
 var processStart = time.Now()

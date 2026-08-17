@@ -6,7 +6,7 @@ import (
 	"fmt"
 	mathrand "math/rand"
 
-	"llm-benchy/internal/corpus"
+	"github.com/Arvintian/llm-benchy/internal/corpus"
 )
 
 // PromptGenerator builds (context, prompt) pairs from a corpus.

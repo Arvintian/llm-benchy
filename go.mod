@@ -1,4 +1,4 @@
-module llm-benchy
+module github.com/Arvintian/llm-benchy
 
 go 1.21
 

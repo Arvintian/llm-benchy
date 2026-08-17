@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"llm-benchy/internal/client"
+	"github.com/Arvintian/llm-benchy/internal/client"
 )
 
 // TimeSeriesPoint is a [timestamp, value] pair.// TimeSeries is a list of TimeSeriesPoint (one point per window).
