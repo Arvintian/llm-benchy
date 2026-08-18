@@ -1,0 +1,55 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Run check (vet + build + test)
+        run: make check
+
+  build-verify:
+    strategy:
+      matrix:
+        platform:
+          - { os: linux, arch: amd64 }
+          - { os: linux, arch: arm64 }
+          - { os: darwin, arch: amd64 }
+          - { os: darwin, arch: arm64 }
+          - { os: windows, arch: amd64 }
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Build for ${{ matrix.platform.os }}/${{ matrix.platform.arch }}
+        run: |
+          CGO_ENABLED=0 GOOS=${{ matrix.platform.os }} GOARCH=${{ matrix.platform.arch }} go build -v -o llm-benchy-${{ matrix.platform.os }}-${{ matrix.platform.arch }}${{ matrix.platform.os == 'windows' && '.exe' || '' }} .
+
+      - name: Verify binary
+        run: |
+          if [ "${{ matrix.platform.os }}" != "windows" ]; then
+            file llm-benchy-${{ matrix.platform.os }}-${{ matrix.platform.arch }}${{ matrix.platform.os == 'windows' && '.exe' || '' }}
+            echo "Build successful for ${{ matrix.platform.os }}/${{ matrix.platform.arch }}"
+          else
+            echo "Build successful for ${{ matrix.platform.os }}/${{ matrix.platform.arch }}"
+          fi

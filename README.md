@@ -56,12 +56,27 @@ make fmt        # gofmt all sources
 make tidy       # go mod tidy
 make install    # go install into $GOPATH/bin
 make cross      # build dist/ for linux-amd64 and darwin-arm64
+make build-all  # build all release platforms into dist/
+make release    # build-all + create tar.gz/zip archives in dist/
 make clean      # remove the binary and dist/
 ```
 
 The default version is taken from `version.go` and can be overridden with
 `VERSION=<ver>` on the make command line or
 `go build -ldflags "-X main.Version=0.1.0"`.
+
+### Releasing
+
+```bash
+scripts/release.sh   # bump, tag and push vX.Y.Z
+```
+
+Pushing a `v*` tag triggers the GitHub Actions **Release** workflow, which
+runs `make check`, `make build-all` and `make release` and publishes
+tar.gz/zip binaries for linux (amd64/arm64), darwin (amd64/arm64) and
+windows (amd64) to the
+[releases page](https://github.com/Arvintian/llm-benchy/releases).
+`scripts/version.sh` prints the current git/Go/binary version info.
 
 ## Usage
 
@@ -181,6 +196,8 @@ main.go                  CLI entry point
 version.go               version (overridable via -ldflags)
 Makefile                 build / test / vet / cross-compile targets
 docs/BENCHMARKING.md     execution flow and metric algorithms (detailed)
+scripts/                 release.sh / version.sh (release tooling)
+.github/workflows        CI (build & test) + auto release on v* tags
 internal/config          flag parsing (+ endpoint /models listing)
 internal/corpus          corpus loading (embed + download), tokenization
 internal/corpus/embedded_book.txt  default corpus (Sherlock Holmes), embedded via //go:embed
