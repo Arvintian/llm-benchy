@@ -489,6 +489,39 @@ func formatMetric(m *BenchmarkMetric) string {
 	return fmt.Sprintf("%.2f \u00b1 %.2f", m.Mean, m.Std)
 }
 
+// displayWidth returns the number of terminal columns a string occupies.
+// Multi-byte UTF-8 sequences such as "\u00b1" count as one column; East Asian
+// wide and fullwidth runes count as two.
+func displayWidth(s string) int {
+	w := 0
+	for _, r := range s {
+		switch {
+		case r < 0x80:
+			w++
+		case isWideRune(r):
+			w += 2
+		default:
+			w++
+		}
+	}
+	return w
+}
+
+func isWideRune(r rune) bool {
+	return (r >= 0x1100 && r <= 0x115F) || // Hangul Jamo
+		(r >= 0x2E80 && r <= 0x303E) || // CJK radicals, CJK symbols
+		(r >= 0x3041 && r <= 0x33FF) || // Hiragana .. CJK compatibility
+		(r >= 0x3400 && r <= 0x4DBF) || // CJK ext A
+		(r >= 0x4E00 && r <= 0x9FFF) || // CJK unified
+		(r >= 0xA000 && r <= 0xA4CF) || // Yi
+		(r >= 0xAC00 && r <= 0xD7A3) || // Hangul syllables
+		(r >= 0xF900 && r <= 0xFAFF) || // CJK compat ideographs
+		(r >= 0xFE30 && r <= 0xFE4F) || // CJK compat forms
+		(r >= 0xFF00 && r <= 0xFF60) || // Fullwidth forms
+		(r >= 0xFFE0 && r <= 0xFFE6) || // Fullwidth signs
+		(r >= 0x20000 && r <= 0x3FFFD) // CJK ext B+
+}
+
 // generateMDReport renders the results as a pipe-formatted markdown table.
 func (r *BenchmarkResults) generateMDReport(concurrency int) string {
 	rows := r.generateRows()
@@ -525,15 +558,17 @@ func (r *BenchmarkResults) generateMDReport(concurrency int) string {
 		data = append(data, line)
 	}
 
-	// Compute column widths
+	// Compute column widths. Widths are measured in display columns (runes),
+	// not bytes, because cells contain multi-byte characters such as "±"
+	// that render as a single column in the terminal.
 	widths := make([]int, len(headers))
 	for i, h := range headers {
-		widths[i] = len(h)
+		widths[i] = displayWidth(h)
 	}
 	for _, line := range data {
 		for i, cell := range line {
-			if len(cell) > widths[i] {
-				widths[i] = len(cell)
+			if w := displayWidth(cell); w > widths[i] {
+				widths[i] = w
 			}
 		}
 	}
@@ -543,9 +578,9 @@ func (r *BenchmarkResults) generateMDReport(concurrency int) string {
 		b.WriteString("|")
 		for i, cell := range cells {
 			if aligns[i] == "left" {
-				b.WriteString(" " + cell + strings.Repeat(" ", widths[i]-len(cell)) + " |")
+				b.WriteString(" " + cell + strings.Repeat(" ", widths[i]-displayWidth(cell)) + " |")
 			} else {
-				b.WriteString(" " + strings.Repeat(" ", widths[i]-len(cell)) + cell + " |")
+				b.WriteString(" " + strings.Repeat(" ", widths[i]-displayWidth(cell)) + cell + " |")
 			}
 		}
 		b.WriteString("\n")
