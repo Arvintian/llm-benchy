@@ -4,14 +4,14 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
-
-	"flag"
 )
 
 // ErrVersionShown is returned when --version was requested (clean exit).
@@ -80,9 +80,36 @@ func (m *multiIntFlag) Set(s string) error {
 	return nil
 }
 
+// printFlagUsage prints flag help in --flag form (the standard flag
+// package accepts -flag and --flag interchangeably but its default usage
+// output shows the single-dash form, which is misleading).
+func printFlagUsage(fs *flag.FlagSet) {
+	fmt.Fprintf(os.Stderr, "Usage of %s:\n", fs.Name())
+	fmt.Fprintf(os.Stderr, "\nFlags:\n")
+
+	type line struct{ name, usage string }
+	lines := make([]line, 0, fs.NFlag())
+	maxLen := 0
+	fs.VisitAll(func(f *flag.Flag) {
+		name := "  --" + f.Name
+		if len(name) > maxLen {
+			maxLen = len(name)
+		}
+		lines = append(lines, line{name, f.Usage})
+	})
+	for _, l := range lines {
+		usage := l.usage
+		if usage != "" && !strings.HasPrefix(usage, " ") {
+			usage = " " + usage
+		}
+		fmt.Fprintf(os.Stderr, "%-*s%s\n", maxLen+2, l.name, usage)
+	}
+}
+
 // FromFlags parses command line arguments into a BenchmarkConfig.
 func FromFlags(args []string, version string) (*BenchmarkConfig, error) {
 	fs := flag.NewFlagSet("llm-benchy", flag.ExitOnError)
+	fs.Usage = func() { printFlagUsage(fs) }
 
 	baseURL := fs.String("base-url", "", "OpenAI compatible endpoint URL (required)")
 	apiKey := fs.String("api-key", "EMPTY", "API Key for the endpoint")
