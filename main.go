@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime"
 	"time"
 
 	"github.com/Arvintian/llm-benchy/internal/client"
@@ -17,11 +18,20 @@ import (
 	"github.com/Arvintian/llm-benchy/internal/runner"
 )
 
+// printVersion prints the version along with build info.
+func printVersion() {
+	fmt.Printf("llm-benchy %s\n", Version)
+	fmt.Printf("Build Time: %s\n", BuildTime)
+	fmt.Printf("Go Version: %s\n", runtime.Version())
+	fmt.Printf("Platform: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+}
+
 func main() {
 	// 1. Parse configuration
-	cfg, err := config.FromFlags(os.Args[1:], Version)
+	cfg, err := config.FromFlags(os.Args[1:])
 	if err != nil {
 		if errors.Is(err, config.ErrVersionShown) {
+			printVersion()
 			return
 		}
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

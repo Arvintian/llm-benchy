@@ -1,6 +1,15 @@
 BINARY  := llm-benchy
-VERSION ?= 0.1.0
-LDFLAGS := -s -w -X main.Version=$(VERSION)
+GIT_VERSION = $(shell git rev-parse --short HEAD)
+GIT_DESCRIBE = $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/-g\([0-9a-f]\)/-\1/')
+ifeq ($(strip $(GIT_DESCRIBE)),)
+VERSION = dev-$(GIT_VERSION)
+else ifeq ($(findstring $(GIT_VERSION),$(GIT_DESCRIBE)),)
+VERSION = $(GIT_DESCRIBE)-$(GIT_VERSION)
+else
+VERSION = $(GIT_DESCRIBE)
+endif
+BUILD_TIME = $(shell date -u '+%Y-%m-%d_%H:%M:%S%z')
+LDFLAGS := -s -w -X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME)
 GOFLAGS ?=
 
 GOOS ?= linux

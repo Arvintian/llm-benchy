@@ -25,15 +25,11 @@ jobs:
       - name: Run check (vet + build + test)
         run: make check
 
-      - name: Determine version
-        id: version
-        run: echo "version=$(git describe --tags --exact-match 2>/dev/null || echo dev)" >> "$GITHUB_OUTPUT"
-
       - name: Build all binaries
-        run: make build-all VERSION=${{ steps.version.outputs.version }}
+        run: make build-all
 
       - name: Create release archives
-        run: make release VERSION=${{ steps.version.outputs.version }}
+        run: make release
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1

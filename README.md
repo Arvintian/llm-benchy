@@ -129,7 +129,7 @@ List style flags accept repeated or comma-separated values:
 - `--save-all-throughput-timeseries`: Save per-request throughput series (JSON).
 - `--exit-on-first-fail`: Stop on first failed test, exit non-zero.
 - `--no-results-on-fail`: Discard results on failure (implies `--exit-on-first-fail`).
-- `--version`: Print version.
+- `--version`: Print version and build info (build time, Go version, platform).
 
 ### Differences from the Python version
 

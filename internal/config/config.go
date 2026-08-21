@@ -107,7 +107,7 @@ func printFlagUsage(fs *flag.FlagSet) {
 }
 
 // FromFlags parses command line arguments into a BenchmarkConfig.
-func FromFlags(args []string, version string) (*BenchmarkConfig, error) {
+func FromFlags(args []string) (*BenchmarkConfig, error) {
 	fs := flag.NewFlagSet("llm-benchy", flag.ExitOnError)
 	fs.Usage = func() { printFlagUsage(fs) }
 
@@ -173,8 +173,8 @@ func FromFlags(args []string, version string) (*BenchmarkConfig, error) {
 		return nil, err
 	}
 	if *showVersion {
-		fmt.Printf("%s %s\n", fs.Name(), version)
 		// Returning a nil config with nil error signals clean exit.
+		// The caller is responsible for printing the version info.
 		return nil, ErrVersionShown
 	}
 
