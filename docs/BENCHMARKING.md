@@ -61,6 +61,9 @@ every reported number is computed. The short version lives in the
      aggregation and the rest of the matrix continues.
 8. **Reporting**: each configuration is aggregated (see below) into one
    `pp` row and one `tg` row, printed and optionally saved (md/json/csv).
+   The `ttfr` / `est_ppt` / `e2e_ttft` columns are rendered on the `pp` row
+   only (one measurement per configuration); the `tg` row carries the
+   throughput columns and leaves the latency columns empty.
    JSON includes metadata (version, UTC timestamp, latency mode + measured
    ms, model, prefix-caching flag, max concurrency) and, with the
    timeseries flags, per-window throughput series.
@@ -78,7 +81,7 @@ For every streamed request the client records:
 
 | Field | Meaning |
 |---|---|
-| `start_ts` | request POST issued |
+| `start_ts` | taken *before* the POST is issued (includes connection setup; `http.Client.Do` only returns once the response headers arrive, so recording it later would hide the whole prefill phase) |
 | `first_response_ts` | first SSE chunk carrying `choices` |
 | `first_token_ts` | first chunk with non-empty `content` or `reasoning` |
 | `end_ts` | stream fully read |
@@ -109,13 +112,23 @@ With `L` = calibrated endpoint latency (s):
 ```
 ttfr       = first_response_ts − start_ts
 e2e_ttft   = first_token_ts    − start_ts
-est_ppt    = max(0, ttfr      − L)      (report column: est_ppt, ms)
+est_ppt    = max(0, e2e_ttft  − L)      (report column: est_ppt, ms)
 pp_speed   = prompt_tokens / est_ppt                    (t/s, per request)
 tg_speed   = (total_tokens − 1) / (end_ts − first_token_ts)   (t/s)
 ```
 
 A pure `ttft = max(0, e2e_ttft − L)` is computed internally as well but is
 not part of the report columns.
+
+> **Why `est_ppt` uses `e2e_ttft` and not `ttfr`:** llama.cpp-style backends
+> flush the HTTP headers together with an empty `{"role":"assistant","content":""}`
+> delta chunk *before* prompt processing starts, so `ttfr` measures only
+> connection/queue time (typically 1–5 ms, i.e. the same order as the
+> calibrated endpoint latency `L`). Deriving `est_ppt` from `ttfr` would clamp
+> it to 0, produce no `pp` samples at all and silently drop the `pp` row (and
+> with it the `ttfr` / `est_ppt` / `e2e_ttft` columns, which are only rendered
+> on `pp` rows). Chunks with empty `content`/`reasoning` never count as a
+> generated token.
 
 ### Batch metrics (concurrency > 1)
 

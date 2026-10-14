@@ -174,8 +174,10 @@ Each run proceeds through:
    - `pp` speed (t/s) and, for concurrency > 1, per-request `t/s (req)`
    - `tg` speed (t/s)
    - `peak t/s`: max token count in a sliding 1-second window
-   - `ttfr (ms)`: time to first response chunk
-   - `est_ppt (ms)`: estimated prompt processing time (`ttfr` - endpoint latency)
+   - `ttfr (ms)`: time to first response chunk (the latency columns `ttfr` /
+     `est_ppt` / `e2e_ttft` are reported on the `pp` rows; `tg` rows show
+     throughput only)
+   - `est_ppt (ms)`: estimated prompt processing time (`e2e_ttft` - endpoint latency)
    - `e2e_ttft (ms)`: time from request start to first generated token
    Results are printed to stdout and optionally saved via `--save-result`
    as Markdown (table), JSON (full report incl. metadata and timeseries) or

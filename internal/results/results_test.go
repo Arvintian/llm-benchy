@@ -1,8 +1,11 @@
 package results
 
 import (
+	"math"
 	"strings"
 	"testing"
+
+	"github.com/Arvintian/llm-benchy/internal/client"
 )
 
 func TestMDReportColumnsAlign(t *testing.T) {
@@ -36,6 +39,52 @@ func TestMDReportColumnsAlign(t *testing.T) {
 	for i, line := range lines {
 		if got := displayWidth(line); got != want {
 			t.Errorf("line %d display width %d, want %d:\n%s", i, got, want, line)
+		}
+	}
+}
+
+// TestEstPPTUsesFirstTokenChunk guards against backends that flush the
+// response headers plus an empty "role" delta chunk before prefill starts:
+// est_ppt (and therefore the whole pp row) must be derived from the first
+// *generated* token, not from the first raw chunk.
+func TestEstPPTUsesFirstTokenChunk(t *testing.T) {
+	f := func(v float64) *float64 { return &v }
+
+	start := 100.0
+	res := &client.RequestResult{
+		StartTs:         start,
+		EndTs:           start + 1.5,
+		FirstResponseTs: f(start + 0.002), // headers + empty role delta chunk
+		FirstTokenTs:    f(start + 0.500), // first real token after prefill
+		PromptTokens:    2048,
+		TotalTokens:     32,
+		TokenTimestamps: []float64{start + 0.5, start + 1.5},
+	}
+
+	r := NewBenchmarkResults()
+	r.Add("model", 2048, 32, 0, 1, [][]*client.RequestResult{{res}}, 0.005, 2048, false, false, false)
+
+	run := r.Runs[0]
+	if run.PPThroughput == nil {
+		t.Fatal("pp throughput missing: est_ppt must not collapse to 0 for pre-flushed role chunks")
+	}
+	checks := []struct {
+		name      string
+		metric    *BenchmarkMetric
+		mean      float64
+		tolerance float64
+	}{
+		{"ttfr", run.TTFR, 2.0, 0.01}, // ms, first raw chunk
+		{"e2e_ttft", run.E2ETTFT, 500.0, 0.01},
+		{"est_ppt", run.EstPPT, 495.0, 0.01}, // e2e_ttft - latency
+		{"pp", run.PPThroughput, 2048 / 0.495, 0.01},
+	}
+	for _, c := range checks {
+		if c.metric == nil {
+			t.Fatalf("%s metric is nil", c.name)
+		}
+		if math.Abs(c.metric.Mean-c.mean) > c.tolerance {
+			t.Errorf("%s = %.4f, want %.4f", c.name, c.metric.Mean, c.mean)
 		}
 	}
 }

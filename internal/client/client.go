@@ -353,6 +353,13 @@ func (c *LLMClient) RunGeneration(ctx context.Context, contextText, promptText s
 		reqBody.CachePrompt = &falseVal
 	}
 
+	// Start timestamp must be taken *before* the request is issued:
+	// postChat returns as soon as the response headers are read, and many
+	// backends (e.g. llama.cpp server) flush the headers together with an
+	// empty "role" delta chunk before prompt processing even starts.
+	// Measuring from the header arrival would collapse ttfr/e2e_ttft to ~0.
+	result.StartTs = perfCounter()
+
 	resp, err := c.postChat(reqBody, ctx)
 	if err != nil {
 		fmt.Printf("Error during run: %v\n", err)
@@ -360,8 +367,6 @@ func (c *LLMClient) RunGeneration(ctx context.Context, contextText, promptText s
 		return result
 	}
 	defer resp.Body.Close()
-
-	result.StartTs = perfCounter()
 
 	if resp.StatusCode != 200 {
 		errText, _ := io.ReadAll(resp.Body)

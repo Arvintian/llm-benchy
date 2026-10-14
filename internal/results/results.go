@@ -314,7 +314,12 @@ func (r *BenchmarkResults) processBatch(
 			firstTokenTimes = append(firstTokenTimes, *res.FirstTokenTs)
 			e2eTTFT = *res.FirstTokenTs - res.StartTs
 			ttft = math.Max(0, e2eTTFT-latency)
-			estPPT = math.Max(0, ttfr-latency)
+			// Prompt processing ends when the first *generated* token
+			// arrives. Using ttfr here would break backends that flush the
+			// response headers plus an empty "role" delta chunk before
+			// prefill (ttfr would then be pure network/queue time and
+			// est_ppt would clamp to 0, dropping the whole pp row).
+			estPPT = math.Max(0, e2eTTFT-latency)
 
 			*aggE2ETTFTValues = append(*aggE2ETTFTValues, e2eTTFT)
 			*aggTTFTValues = append(*aggTTFTValues, ttft)
